@@ -18,6 +18,7 @@ import argparse
 import PIL.Image
 import time
 import torch
+import numpy as np
 from nanoowl.owl_predictor import (
     OwlPredictor
 )
@@ -85,6 +86,13 @@ if __name__ == "__main__":
         dt = (t1 - t0) / 1e9
         print(f"PROFILING FPS: {args.num_profiling_runs/dt}")
 
-    image = draw_owl_output(image, output, text=text, draw_text=True)
+    # Always generate and save output image
+    # Convert PIL image to writable NumPy array to avoid warnings
+    image_array = np.array(image, dtype=np.uint8)
+    image_array = draw_owl_output(image_array, output, text=text, draw_text=True)
 
-    image.save(args.output)
+    # Convert the NumPy array to a PIL Image object
+    image_pil = PIL.Image.fromarray(image_array)
+    
+    image_pil.save(args.output)
+    print(f"Output saved to: {args.output}")

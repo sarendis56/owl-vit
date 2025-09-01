@@ -23,6 +23,7 @@ from nanoowl.tree_predictor import (
 from nanoowl.tree_drawing import (
     draw_tree_output
 )
+import numpy as np
 
 
 if __name__ == "__main__":
@@ -56,6 +57,10 @@ if __name__ == "__main__":
         threshold=args.threshold
     )
 
+    image = np.array(image).copy()
     image = draw_tree_output(image, output, tree=tree, draw_text=True)
 
-    image.save(args.output)
+    # Convert the NumPy array to a PIL Image object
+    image_pil = PIL.Image.fromarray(image)
+    
+    image_pil.save(args.output)
