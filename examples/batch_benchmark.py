@@ -144,10 +144,8 @@ class ObjectDetectionEvaluator:
         # Collect all predictions and ground truths
         for i, (pred, gt, img_size) in enumerate(zip(predictions, ground_truths, image_sizes)):
             if pred is not None:
-                print(f"Image {i}: {len(pred.scores)} predictions")
                 # Get boxes - they are already in pixel coordinates
                 boxes = pred.boxes.detach().cpu().numpy()
-                print(f"    Raw boxes (pixel): {boxes}")
                 
                 # Ensure boxes are within image bounds and handle negative coordinates
                 boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_size[0])
@@ -171,7 +169,6 @@ class ObjectDetectionEvaluator:
                 valid_labels = []
                 valid_scores = []
                 
-                print(f"  Raw predictions: {len(boxes)}")
                 for i, box in enumerate(boxes):
                     width = box[2] - box[0]
                     height = box[3] - box[1]
@@ -180,27 +177,11 @@ class ObjectDetectionEvaluator:
                         valid_boxes.append(box)
                         valid_labels.append(labels[i])
                         valid_scores.append(scores[i])
-                    else:
-                        print(f"    Filtered out box {i}: width={width:.1f}, height={height:.1f}, x={box[0]:.1f}, y={box[1]:.1f}")
                 
-                print(f"  Valid predictions: {len(valid_boxes)}")
                 if valid_boxes:
                     all_pred_boxes.extend(valid_boxes)
                     all_pred_labels.extend(valid_labels)
                     all_pred_scores.extend(valid_scores)
-                
-                # Map model predictions to ground truth format
-                pred_labels = [class_names[label_idx] for label_idx in pred.labels.detach().cpu().numpy()]
-                # Remove articles for matching with ground truth
-                labels = []
-                for label in pred_labels:
-                    if label.startswith('a '):
-                        labels.append(label[2:])  # Remove "a "
-                    elif label.startswith('an '):
-                        labels.append(label[3:])  # Remove "an "
-                    else:
-                        labels.append(label)
-                scores = pred.scores.detach().cpu().numpy()
             
             # Ground truth
             all_gt_boxes.extend(gt.boxes)
@@ -231,13 +212,6 @@ class ObjectDetectionEvaluator:
             class_pred_boxes = [box for box, label in zip(pred_boxes, pred_labels) if label == class_name]
             class_pred_scores = [score for score, label in zip(pred_scores, pred_labels) if label == class_name]
             class_gt_boxes = [box for box, label in zip(gt_boxes, gt_labels) if label == class_name]
-            
-            # Debug info for first few classes
-            if class_name in ['car', 'person', 'bicycle'] and len(class_pred_boxes) > 0:
-                print(f"Class {class_name}: {len(class_pred_boxes)} predictions, {len(class_gt_boxes)} ground truth")
-                if len(class_pred_boxes) > 0 and len(class_gt_boxes) > 0:
-                    iou = calculate_iou(class_pred_boxes[0], class_gt_boxes[0])
-                    print(f"  IoU between first pred and first GT: {iou:.3f}")
             
             if len(class_gt_boxes) == 0:
                 class_aps[class_name] = 0.0
@@ -383,7 +357,7 @@ class BatchBenchmark:
     def run_benchmark(self, 
                      dataset_path: str,
                      prompts: List[str],
-                     threshold: float = 0.1,
+                     threshold: float = 0.5,
                      output_dir: Optional[str] = None,
                      save_visualizations: bool = False,
                      max_images: Optional[int] = None,
@@ -395,10 +369,13 @@ class BatchBenchmark:
         
         print(f"Found {len(image_paths)} images in dataset")
         
-        if max_images and max_images < len(image_paths):
-            print(f"Limiting to {max_images} images")
-            image_paths = image_paths[:max_images]
-            ground_truths = ground_truths[:max_images]
+        if max_images:
+            if max_images < len(image_paths):
+                print(f"Limiting to {max_images} images")
+                image_paths = image_paths[:max_images]
+                ground_truths = ground_truths[:max_images]
+            else:
+                print(f"Dataset has {len(image_paths)} images, which is less than requested {max_images}")
         
         print(f"Loaded {len(image_paths)} images")
         
@@ -664,9 +641,8 @@ def extract_pascal_voc_dataset(zip_path: str = "/data/pascal.zip", output_dir: s
                     print(f"  - {os.path.join(root, dir_name)}")
             return None
         
-        # Process annotations
         annotations_file = os.path.join(output_dir, "pascal_voc_annotations.json")
-        num_annotations = create_pascal_voc_annotations(voc_dir, annotations_file, max_images)
+        num_annotations = create_pascal_voc_annotations(voc_dir, annotations_file, None)  # Process all images
         
         if num_annotations > 0:
             print(f"Successfully processed {num_annotations} annotations")
