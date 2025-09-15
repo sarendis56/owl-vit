@@ -215,7 +215,7 @@ live-edited text prompts.  To run the example
 
 ```bash
 cd examples
-python3 batch_benchmark.py \
+python3 rt_benchmark.py \
   --extract_pascal_voc \
   --dataset ./pascal_voc_extracted \
   --max_images 1000 \
