@@ -5,3 +5,6 @@ charmap.json.gz
 sandbox
 pascal_voc_extracted
 final_benchmark
+.vscode
+__pycache__
+full_benchmark

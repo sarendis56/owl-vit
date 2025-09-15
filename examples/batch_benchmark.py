@@ -192,6 +192,89 @@ class ObjectDetectionEvaluator:
             all_pred_boxes, all_pred_labels, all_pred_scores,
             all_gt_boxes, all_gt_labels, class_names
         )
+
+    def compute_operating_point_metrics(self,
+                                        predictions: List[OwlDecodeOutput],
+                                        ground_truths: List[GroundTruthAnnotation],
+                                        class_names: List[str],
+                                        image_sizes: List[Tuple[int, int]],
+                                        score_threshold: float) -> Tuple[int, int, int, int, int]:
+        """Compute TP, FP, FN at a fixed score threshold (no AP). Returns tp, fp, fn, num_preds, num_gts."""
+        pred_boxes = []
+        pred_labels = []
+        pred_scores = []
+        gt_boxes = []
+        gt_labels = []
+
+        for pred, gt, img_size in zip(predictions, ground_truths, image_sizes):
+            if pred is not None:
+                boxes = pred.boxes.detach().cpu().numpy()
+                boxes[:, [0, 2]] = np.clip(boxes[:, [0, 2]], 0, img_size[0])
+                boxes[:, [1, 3]] = np.clip(boxes[:, [1, 3]], 0, img_size[1])
+                labels = [class_names[idx] for idx in pred.labels.detach().cpu().numpy()]
+                clean_labels = []
+                for label in labels:
+                    if label.startswith('a '):
+                        clean_labels.append(label[2:])
+                    elif label.startswith('an '):
+                        clean_labels.append(label[3:])
+                    else:
+                        clean_labels.append(label)
+                scores = pred.scores.detach().cpu().numpy()
+
+                for i, box in enumerate(boxes):
+                    width = box[2] - box[0]
+                    height = box[3] - box[1]
+                    if width > 1 and height > 1 and box[0] >= 0 and box[1] >= 0 and scores[i] >= score_threshold:
+                        pred_boxes.append(box)
+                        pred_labels.append(clean_labels[i])
+                        pred_scores.append(scores[i])
+
+            gt_boxes.extend(gt.boxes)
+            gt_labels.extend(gt.labels)
+
+        # Match and count per class
+        tp = fp = 0
+        fn = 0
+        for class_name in class_names:
+            class_pred_boxes = [b for b, l in zip(pred_boxes, pred_labels) if l == class_name]
+            class_pred_scores = [s for s, l in zip(pred_scores, pred_labels) if l == class_name]
+            class_gt_boxes = [b for b, l in zip(gt_boxes, gt_labels) if l == class_name]
+
+            if len(class_gt_boxes) == 0 and len(class_pred_boxes) == 0:
+                continue
+            if len(class_gt_boxes) == 0:
+                fp += len(class_pred_boxes)
+                continue
+            if len(class_pred_boxes) == 0:
+                fn += len(class_gt_boxes)
+                continue
+
+            order = np.argsort(class_pred_scores)[::-1]
+            class_pred_boxes = [class_pred_boxes[i] for i in order]
+
+            gt_matched = [False] * len(class_gt_boxes)
+            class_tp = class_fp = 0
+            for pbox in class_pred_boxes:
+                best_iou = 0.0
+                best_idx = -1
+                for gi, gbox in enumerate(class_gt_boxes):
+                    if gt_matched[gi]:
+                        continue
+                    iou = calculate_iou(pbox, gbox)
+                    if iou > best_iou:
+                        best_iou = iou
+                        best_idx = gi
+                if best_iou >= self.iou_threshold:
+                    class_tp += 1
+                    gt_matched[best_idx] = True
+                else:
+                    class_fp += 1
+            tp += class_tp
+            fp += class_fp
+            fn += len(class_gt_boxes) - class_tp
+
+        return tp, fp, fn, len(pred_boxes), len(gt_boxes)
     
     def _calculate_metrics(self, 
                           pred_boxes: List[List[float]], 
@@ -306,6 +389,126 @@ class BatchBenchmark:
         )
         self.device = device
         self.evaluator = ObjectDetectionEvaluator()
+
+    @staticmethod
+    def _remove_article(name: str) -> str:
+        if name.startswith('a '):
+            return name[2:]
+        if name.startswith('an '):
+            return name[3:]
+        return name
+
+    @staticmethod
+    def _filter_output_by_score(output: OwlDecodeOutput, threshold: float) -> OwlDecodeOutput:
+        if output is None:
+            return None
+        if threshold <= 0.0:
+            return output
+        scores = output.scores.detach().cpu().numpy()
+        mask = scores >= threshold
+        if mask.sum() == len(scores):
+            return output
+        # Filter tensors by mask; keep device
+        device = output.boxes.device
+        keep = torch.from_numpy(mask).to(device)
+        return OwlDecodeOutput(
+            boxes=output.boxes[keep],
+            scores=output.scores[keep],
+            labels=output.labels[keep],
+            input_indices=output.input_indices[keep]
+        )
+
+    def _compute_coco_metrics(self,
+                              predictions: List[OwlDecodeOutput],
+                              ground_truths: List[GroundTruthAnnotation],
+                              class_names: List[str],
+                              image_paths: List[str],
+                              image_sizes: List[Tuple[int, int]]
+                              ) -> Optional[Dict[str, Any]]:
+        try:
+            from pycocotools.coco import COCO
+            from pycocotools.cocoeval import COCOeval
+        except Exception as e:
+            print(f"pycocotools not available, skipping COCO evaluation: {e}")
+            return None
+
+        # Build COCO-style GT
+        categories = []
+        name_to_id = {}
+        for cid, name in enumerate([self._remove_article(n) for n in class_names], start=1):
+            categories.append({"id": cid, "name": name})
+            name_to_id[name] = cid
+
+        images = []
+        annotations = []
+        ann_id = 1
+        for img_id, (gt, (w, h), path) in enumerate(zip(ground_truths, image_sizes, image_paths), start=1):
+            images.append({"id": img_id, "file_name": os.path.basename(path), "width": w, "height": h})
+            for box, label in zip(gt.boxes, gt.labels):
+                x1, y1, x2, y2 = box
+                bbox = [float(x1), float(y1), float(x2 - x1), float(y2 - y1)]
+                cname = self._remove_article(label)
+                if cname not in name_to_id:
+                    continue
+                annotations.append({
+                    "id": ann_id,
+                    "image_id": img_id,
+                    "category_id": name_to_id[cname],
+                    "bbox": bbox,
+                    "area": float(bbox[2] * bbox[3]),
+                    "iscrowd": 0
+                })
+                ann_id += 1
+
+        coco_gt_dict = {"images": images, "annotations": annotations, "categories": categories}
+        coco_gt = COCO()
+        coco_gt.dataset = coco_gt_dict
+        coco_gt.createIndex()
+
+        # Build detections
+        detections = []
+        for img_id, (pred, (w, h)) in enumerate(zip(predictions, image_sizes), start=1):
+            if pred is None or pred.boxes.numel() == 0:
+                continue
+            boxes = pred.boxes.detach().cpu().numpy()
+            labels = pred.labels.detach().cpu().numpy()
+            scores = pred.scores.detach().cpu().numpy()
+            for b, l, s in zip(boxes, labels, scores):
+                x1, y1, x2, y2 = b
+                bbox = [float(x1), float(y1), float(x2 - x1), float(y2 - y1)]
+                cname = self._remove_article(class_names[int(l)])
+                if cname not in name_to_id:
+                    continue
+                detections.append({
+                    "image_id": img_id,
+                    "category_id": name_to_id[cname],
+                    "bbox": bbox,
+                    "score": float(s)
+                })
+
+        if len(annotations) == 0:
+            print("No ground-truth annotations for COCO eval; skipping.")
+            return None
+
+        coco_dt = coco_gt.loadRes(detections) if len(detections) > 0 else COCO()
+        if len(detections) == 0:
+            print("No detections to evaluate for COCO; skipping.")
+            return None
+
+        coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
+
+        stats = coco_eval.stats  # 12-element array
+        return {
+            "AP": float(stats[0]),
+            "AP50": float(stats[1]),
+            "AP75": float(stats[2]),
+            "AP_small": float(stats[3]),
+            "AP_medium": float(stats[4]),
+            "AP_large": float(stats[5])
+        }
     
     def load_dataset(self, dataset_path: str) -> Tuple[List[str], List[GroundTruthAnnotation]]:
         """Load dataset from directory or annotation file"""
@@ -361,7 +564,10 @@ class BatchBenchmark:
                      output_dir: Optional[str] = None,
                      save_visualizations: bool = False,
                      max_images: Optional[int] = None,
-                     warmup_runs: int = 5) -> BenchmarkResult:
+                     warmup_runs: int = 5,
+                     viz_threshold: float = 0.5,
+                     coco_eval: bool = False,
+                     eval_threshold: Optional[float] = None) -> BenchmarkResult:
         """Run complete benchmark on dataset"""
         
         print(f"Loading dataset from {dataset_path}...")
@@ -396,7 +602,7 @@ class BatchBenchmark:
                     image=sample_image,
                     text=prompts,
                     text_encodings=text_encodings,
-                    threshold=threshold
+                    threshold=0.0  # warmup without filtering
                 )
             torch.cuda.synchronize()
         
@@ -433,7 +639,7 @@ class BatchBenchmark:
                     image=image,
                     text=prompts,
                     text_encodings=text_encodings,
-                    threshold=threshold
+                    threshold=0.0  # evaluate on unfiltered predictions
                 )
                 
                 torch.cuda.synchronize() if torch.cuda.is_available() else None
@@ -443,8 +649,9 @@ class BatchBenchmark:
                 # Postprocessing (visualization if needed)
                 post_start = time.time()
                 if save_visualizations and output_dir:
+                    viz_output = self._filter_output_by_score(output, viz_threshold)
                     image_array = np.array(image)
-                    image_array = draw_owl_output(image_array, output, text=prompts, draw_text=True)
+                    image_array = draw_owl_output(image_array, viz_output, text=prompts, draw_text=True)
                     output_image = PIL.Image.fromarray(image_array)
                     output_path = os.path.join(output_dir, f"result_{i:04d}.jpg")
                     output_image.save(output_path)
@@ -502,6 +709,31 @@ class BatchBenchmark:
             detection_metrics = self.evaluator.evaluate_predictions(
                 predictions, ground_truths, class_names, image_sizes
             )
+
+            # Optionally recompute precision/recall/F1 at a fixed score threshold for reporting
+            if eval_threshold is not None:
+                tp, fp, fn, num_preds, num_gts = self.evaluator.compute_operating_point_metrics(
+                    predictions, ground_truths, class_names, image_sizes, eval_threshold
+                )
+                precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+                recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+                f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0.0
+                detection_metrics.precision = precision
+                detection_metrics.recall = recall
+                detection_metrics.f1_score = f1
+                detection_metrics.total_predictions = num_preds
+                detection_metrics.total_ground_truth = num_gts
+                detection_metrics.true_positives = tp
+                detection_metrics.false_positives = fp
+                detection_metrics.false_negatives = fn
+
+            # Optional COCO evaluation
+            coco_metrics = None
+            if coco_eval:
+                print("Calculating COCO metrics...")
+                coco_metrics = self._compute_coco_metrics(
+                    predictions, ground_truths, class_names, image_paths, image_sizes
+                )
         else:
             print("No ground truth annotations found, skipping detection metrics")
             detection_metrics = DetectionMetrics(
@@ -509,6 +741,7 @@ class BatchBenchmark:
                 avg_precision_per_class={}, total_predictions=0, total_ground_truth=0,
                 true_positives=0, false_positives=0, false_negatives=0
             )
+            coco_metrics = None
         
         # Create config
         config = {
@@ -517,8 +750,11 @@ class BatchBenchmark:
             "threshold": threshold,
             "num_images": len(image_paths),
             "device": self.device,
-            "image_encoder_engine": "TensorRT" if self.predictor.image_encoder_engine else "PyTorch"
+            "image_encoder_engine": "TensorRT" if self.predictor.image_encoder_engine else "PyTorch",
+            "viz_threshold": viz_threshold
         }
+        if coco_eval and coco_metrics is not None:
+            config["coco_metrics"] = coco_metrics
         
         return BenchmarkResult(
             detection_metrics=detection_metrics,
@@ -572,6 +808,14 @@ class BatchBenchmark:
                 print(f"\n  Per-class Average Precision:")
                 for class_name, ap in results.detection_metrics.avg_precision_per_class.items():
                     print(f"    {class_name}: {ap:.3f}")
+
+            # Optional COCO metrics
+            if "coco_metrics" in results.config:
+                cm = results.config["coco_metrics"]
+                print(f"\nCOCO Metrics (bbox):")
+                print(f"  AP@[.50:.95]: {cm.get('AP', 0.0):.3f}")
+                print(f"  AP@0.50: {cm.get('AP50', 0.0):.3f}")
+                print(f"  AP@0.75: {cm.get('AP75', 0.0):.3f}")
 
 
 def create_sample_dataset(output_dir: str, num_images: int = 10):
@@ -842,6 +1086,12 @@ if __name__ == "__main__":
                        help="Extract Pascal VOC 2012 dataset from /data/pascal.zip")
     parser.add_argument("--use_pascal_voc_prompts", action="store_true",
                        help="Use Pascal VOC class names as prompts")
+    parser.add_argument("--viz_threshold", type=float, default=0.5,
+                       help="Score threshold used only for visualization")
+    parser.add_argument("--coco_eval", action="store_true",
+                       help="Compute COCO-style metrics with pycocotools")
+    parser.add_argument("--eval_threshold", type=float, default=None,
+                       help="Optional score threshold for reporting precision/recall/F1 (does not affect AP)")
     
     args = parser.parse_args()
     
@@ -885,7 +1135,10 @@ if __name__ == "__main__":
         output_dir=args.output_dir,
         save_visualizations=args.save_visualizations,
         max_images=args.max_images,
-        warmup_runs=args.warmup_runs
+        warmup_runs=args.warmup_runs,
+        viz_threshold=args.viz_threshold,
+        coco_eval=args.coco_eval,
+        eval_threshold=args.eval_threshold
     )
     
     # Print and save results

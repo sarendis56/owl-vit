@@ -211,7 +211,23 @@ live-edited text prompts.  To run the example
     - Example: [a face (interested, yawning / bored)]
     - Example: (indoors, outdoors)
 
+### For demo
 
+```bash
+cd examples
+python3 batch_benchmark.py \
+  --extract_pascal_voc \
+  --dataset ./pascal_voc_extracted \
+  --max_images 1000 \
+  --use_pascal_voc_prompts \
+  --threshold 0.0 \
+  --viz_threshold 0.2 \
+  --eval_threshold 0.2 \
+  --image_encoder_engine ../data/owl_image_encoder_patch32.engine \
+  --output_dir ./full_benchmark \
+  --save_visualizations \
+  --coco_eval
+```
 
 <a id="acknowledgement"></a>
 ## 👏 Acknowledgement
