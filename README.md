@@ -232,6 +232,7 @@ python3 rt_benchmark.py \
 ```bash
 python3 hf_benchmark.py \
   --extract_pascal_voc \
+  --use_pascal_voc_prompts \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
   --threshold 0.1 \
@@ -260,6 +261,7 @@ python3 model_encryption.py \
 ```bash
 python3 secure_inference_benchmark.py \
   --extract_pascal_voc \
+  --use_pascal_voc_prompts \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
   --batch 8 \
