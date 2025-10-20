@@ -246,14 +246,26 @@ python3 hf_benchmark.py \
   --batch 8
 ```
 
+Encryption:
 ```bash
-python3 secure_encrypt_benchmark.py \
+python3 model_encryption.py \
   --extract_pascal_voc \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
   --coco_eval \
   --save_visualizations \
-  --batch 2
+  --viz_threshold 0.05 \
+  --batch 8
+```
+
+```bash
+python3 secure_inference_benchmark.py \
+  --extract_pascal_voc \
+  --dataset ./pascal_voc_extracted \
+  --max_images 100 \
+  --batch 8 \
+  --save_visualizations \
+  --num_layers 2
 ```
 
 <a id="acknowledgement"></a>

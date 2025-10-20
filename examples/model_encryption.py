@@ -261,7 +261,7 @@ def main():
     predictor = HFOwlViTPredictor(
         model_name=args.model,
         device=device,
-        quantization="none",
+        quantization="fp16",
         use_channels_last=args.use_channels_last,
     )
 
@@ -312,7 +312,7 @@ def main():
     bench = BatchBenchmark(
         model_name=args.model,
         device=device,
-        quantization="none",
+        quantization="fp16",
         use_channels_last=args.use_channels_last,
     )
     bench.predictor = predictor

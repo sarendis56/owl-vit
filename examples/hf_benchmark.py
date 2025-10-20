@@ -825,39 +825,36 @@ class BatchBenchmark:
                 for i, (output, image, gt) in enumerate(zip(batch_outputs, batch_images, batch_gts)):
                     if save_visualizations and output_dir:
                         viz_output = self._filter_output_by_score(output, viz_threshold)
-                        # Simple visualization - save image with bounding boxes
-                        if viz_output is not None and len(viz_output.boxes) > 0:
-                            try:
-                                # Create a simple visualization
-                                import matplotlib.pyplot as plt
-                                import matplotlib.patches as patches
-                                
-                                fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-                                ax.imshow(image)
-                                
+                        try:
+                            import matplotlib.pyplot as plt
+                            import matplotlib.patches as patches
+                            fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+                            ax.imshow(image)
+                            drew_any = False
+                            if viz_output is not None and len(viz_output.boxes) > 0:
                                 for box, score, label in zip(viz_output.boxes, viz_output.scores, viz_output.labels):
                                     x1, y1, x2, y2 = box.detach().cpu().numpy()
                                     width = x2 - x1
                                     height = y2 - y1
-                                    
-                                    rect = patches.Rectangle((x1, y1), width, height, 
-                                                           linewidth=2, edgecolor='red', facecolor='none')
+                                    rect = patches.Rectangle((x1, y1), width, height,
+                                                             linewidth=2, edgecolor='red', facecolor='none')
                                     ax.add_patch(rect)
-                                    
-                                    # Add label
-                                    ax.text(x1, y1-5, f"{prompts[label.item()]}: {score.item():.2f}", 
-                                           fontsize=10, color='red', weight='bold')
-                                
-                                ax.set_title(f"Detection Results - Image {batch_start + i}")
-                                ax.axis('off')
-                                
-                                output_path = os.path.join(output_dir, f"result_{batch_start + i:04d}.jpg")
-                                plt.savefig(output_path, bbox_inches='tight', dpi=150)
-                                plt.close()
-                            except ImportError:
-                                print("matplotlib not available, skipping visualization")
-                            except Exception as e:
-                                print(f"Error creating visualization: {e}")
+                                    ax.text(x1, max(0, y1-5), f"{prompts[label.item()]}: {score.item():.2f}",
+                                            fontsize=10, color='red', weight='bold')
+                                drew_any = True
+                            # Always save an image; annotate when no detections
+                            if not drew_any:
+                                ax.text(5, 15, f"No detections (thr={viz_threshold:.2f})", fontsize=12,
+                                        color='yellow', bbox=dict(facecolor='black', alpha=0.5, pad=3))
+                            ax.set_title(f"Detection Results - Image {batch_start + i}")
+                            ax.axis('off')
+                            output_path = os.path.join(output_dir, f"result_{batch_start + i:04d}.jpg")
+                            plt.savefig(output_path, bbox_inches='tight', dpi=150)
+                            plt.close()
+                        except ImportError:
+                            print("matplotlib not available, skipping visualization")
+                        except Exception as e:
+                            print(f"Error creating visualization: {e}")
                 
                 post_end = time.time()
                 batch_post_time = (post_end - post_start) / len(batch_paths)
