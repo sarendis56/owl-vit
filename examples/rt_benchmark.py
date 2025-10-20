@@ -460,7 +460,13 @@ class BatchBenchmark:
                 })
                 ann_id += 1
 
-        coco_gt_dict = {"images": images, "annotations": annotations, "categories": categories}
+        coco_gt_dict = {
+            "images": images, 
+            "annotations": annotations, 
+            "categories": categories,
+            "info": {"description": "Pascal VOC 2012 dataset"},
+            "licenses": [{"id": 1, "name": "Unknown"}]
+        }
         coco_gt = COCO()
         coco_gt.dataset = coco_gt_dict
         coco_gt.createIndex()
@@ -490,10 +496,11 @@ class BatchBenchmark:
             print("No ground-truth annotations for COCO eval; skipping.")
             return None
 
-        coco_dt = coco_gt.loadRes(detections) if len(detections) > 0 else COCO()
         if len(detections) == 0:
             print("No detections to evaluate for COCO; skipping.")
             return None
+
+        coco_dt = coco_gt.loadRes(detections)
 
         coco_eval = COCOeval(coco_gt, coco_dt, iouType='bbox')
         coco_eval.evaluate()
@@ -513,16 +520,16 @@ class BatchBenchmark:
     def load_dataset(self, dataset_path: str) -> Tuple[List[str], List[GroundTruthAnnotation]]:
         """Load dataset from directory or annotation file"""
         
-        dataset_path = Path(dataset_path)
+        dataset_path_obj = Path(dataset_path)
         
-        if dataset_path.is_dir():
+        if dataset_path_obj.is_dir():
             # Load images from directory
             image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff'}
             image_paths = []
             
             for ext in image_extensions:
-                image_paths.extend(list(dataset_path.glob(f"*{ext}")))
-                image_paths.extend(list(dataset_path.glob(f"*{ext.upper()}")))
+                image_paths.extend(list(dataset_path_obj.glob(f"*{ext}")))
+                image_paths.extend(list(dataset_path_obj.glob(f"*{ext.upper()}")))
             
             # Create dummy ground truth (for performance testing only)
             ground_truths = []
@@ -535,7 +542,7 @@ class BatchBenchmark:
             
             return [str(p) for p in image_paths], ground_truths
         
-        elif dataset_path.suffix == '.json':
+        elif dataset_path_obj.suffix == '.json':
             # Load from JSON annotation file
             with open(dataset_path, 'r') as f:
                 data = json.load(f)

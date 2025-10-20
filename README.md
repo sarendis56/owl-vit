@@ -218,13 +218,27 @@ cd examples
 python3 rt_benchmark.py \
   --extract_pascal_voc \
   --dataset ./pascal_voc_extracted \
-  --max_images 1000 \
+  --max_images 100 \
   --use_pascal_voc_prompts \
   --threshold 0.0 \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
   --image_encoder_engine ../data/owl_image_encoder_patch32.engine \
   --output_dir ./full_benchmark \
+  --save_visualizations \
+  --coco_eval
+```
+
+```bash
+python3 hf_benchmark.py \
+  --extract_pascal_voc \
+  --dataset ./pascal_voc_extracted \
+  --max_images 100 \
+  --use_pascal_voc_prompts \
+  --threshold 0.1 \
+  --viz_threshold 0.2 \
+  --eval_threshold 0.2 \
+  --output_dir ./benchmark_results \
   --save_visualizations \
   --coco_eval
 ```
