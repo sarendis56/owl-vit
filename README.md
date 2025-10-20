@@ -220,11 +220,11 @@ python3 rt_benchmark.py \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
   --use_pascal_voc_prompts \
-  --threshold 0.0 \
+  --threshold 0.1 \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
   --image_encoder_engine ../data/owl_image_encoder_patch32.engine \
-  --output_dir ./full_benchmark \
+  --output_dir ./rt_benchmark \
   --save_visualizations \
   --coco_eval
 ```

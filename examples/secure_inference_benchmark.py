@@ -223,8 +223,8 @@ def main():
     parser.add_argument("--num_layers", type=int, default=2, help="Number of initial layers to protect")
     parser.add_argument("--assume_encrypted", action="store_true", help="Assume model is already encrypted at rest")
     parser.add_argument("--quantization", type=str, default="none", 
-                        choices=["none", "fp16", "cpu-int8"],
-                        help="Quantization: none(fp32 GPU) | fp16(GPU) | cpu-int8(dynamic int8 on CPU)")
+                        choices=["none", "fp16"],
+                        help="Quantization: none(fp32 GPU) | fp16(GPU)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -255,11 +255,6 @@ def main():
         dataset_path = args.dataset
 
     # Predictor with on-the-fly crypto
-    # Select device by quantization mode
-    if args.quantization == "cpu-int8":
-        device = "cpu"
-    else:
-        device = device
 
     predictor = DecryptOnTheFlyPredictor(
         master_key=master_key,
