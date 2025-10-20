@@ -242,7 +242,8 @@ python3 hf_benchmark.py \
   --save_visualizations \
   --coco_eval \
   --quantization fp16 \
-  --use_channels_last
+  --use_channels_last \
+  --batch 8
 ```
 
 <a id="acknowledgement"></a>

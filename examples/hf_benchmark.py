@@ -29,6 +29,9 @@ import PIL.Image
 from dataclasses import dataclass, asdict
 from tqdm import tqdm
 
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 # Hugging Face Transformers imports
 from transformers import OwlViTProcessor, OwlViTForObjectDetection
 import torch.nn.functional as F
