@@ -222,6 +222,9 @@ def main():
     parser.add_argument("--eval_threshold", type=float, default=0.2, help="Operating point metrics threshold")
     parser.add_argument("--num_layers", type=int, default=2, help="Number of initial layers to protect")
     parser.add_argument("--assume_encrypted", action="store_true", help="Assume model is already encrypted at rest")
+    parser.add_argument("--quantization", type=str, default="none", 
+                        choices=["none", "fp16", "cpu-int8"],
+                        help="Quantization: none(fp32 GPU) | fp16(GPU) | cpu-int8(dynamic int8 on CPU)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -252,13 +255,19 @@ def main():
         dataset_path = args.dataset
 
     # Predictor with on-the-fly crypto
+    # Select device by quantization mode
+    if args.quantization == "cpu-int8":
+        device = "cpu"
+    else:
+        device = device
+
     predictor = DecryptOnTheFlyPredictor(
         master_key=master_key,
         num_layers=args.num_layers,
         device=device,
         model_name=args.model,
-        quantization="fp16",
-        use_channels_last=args.use_channels_last,
+        quantization=args.quantization,
+        use_channels_last=args.use_channels_last if device == "cuda" and args.quantization == "fp16" else False,
     )
 
     model = predictor.model
@@ -271,8 +280,8 @@ def main():
     bench = BatchBenchmark(
         model_name=args.model,
         device=device,
-        quantization="fp16",
-        use_channels_last=args.use_channels_last,
+        quantization=args.quantization,
+        use_channels_last=args.use_channels_last if device == "cuda" and args.quantization == "fp16" else False,
     )
     bench.predictor = predictor
 

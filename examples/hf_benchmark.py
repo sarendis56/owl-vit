@@ -403,15 +403,10 @@ class HFOwlViTPredictor:
         if quantization == "fp16" and device == "cuda":
             print("Applying FP16 quantization...")
             self.model = self.model.half()
-        elif quantization == "dynamic" and device == "cpu":
+        elif quantization == "cpu-int8" and device == "cpu":
             print("Applying dynamic quantization...")
             import torch.quantization as quant
             self.model = quant.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8)
-        elif quantization == "int8" and device == "cpu":
-            print("Applying INT8 quantization...")
-            # For more aggressive quantization, we'd need to use torch.quantization.quantize
-            # This is a placeholder for now
-            pass
         
         # Apply channels_last optimization if requested
         if use_channels_last and device == "cuda":
@@ -1334,8 +1329,8 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=4,
                        help="Batch size for processing images (default: 4)")
     parser.add_argument("--quantization", type=str, default="none", 
-                       choices=["none", "fp16", "dynamic", "int8"],
-                       help="Quantization method: none, fp16 (GPU only), dynamic (CPU only), int8 (CPU only)")
+                       choices=["none", "fp16", "cpu-int8"],
+                       help="Quantization: none(fp32 GPU) | fp16(GPU) | cpu-int8(dynamic int8 on CPU)")
     parser.add_argument("--use_channels_last", action="store_true",
                        help="Use channels_last memory format for GPU optimization")
     
@@ -1367,12 +1362,18 @@ if __name__ == "__main__":
     else:
         dataset_path = args.dataset
     
+    # Select device based on quantization mode
+    if args.quantization == "cpu-int8":
+        device = "cpu"
+    else:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
     # Initialize benchmark
     benchmark = BatchBenchmark(
         model_name=args.model,
-        device="cuda" if torch.cuda.is_available() else "cpu",
+        device=device,
         quantization=args.quantization,
-        use_channels_last=args.use_channels_last
+        use_channels_last=args.use_channels_last if device == "cuda" and args.quantization == "fp16" else False
     )
     
     # Run benchmark

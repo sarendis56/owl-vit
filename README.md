@@ -234,16 +234,15 @@ python3 hf_benchmark.py \
   --extract_pascal_voc \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
-  --use_pascal_voc_prompts \
   --threshold 0.1 \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
   --output_dir ./benchmark_results \
   --save_visualizations \
   --coco_eval \
-  --quantization fp16 \
   --use_channels_last \
-  --batch 8
+  --batch 8 \
+  --quantization fp16
 ```
 
 Encryption:
@@ -268,7 +267,8 @@ python3 secure_inference_benchmark.py \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
   --save_visualizations \
-  --num_layers 2
+  --num_layers 2 \
+  --quantization fp16
 ```
 
 <a id="acknowledgement"></a>
