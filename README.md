@@ -240,7 +240,9 @@ python3 hf_benchmark.py \
   --eval_threshold 0.2 \
   --output_dir ./benchmark_results \
   --save_visualizations \
-  --coco_eval
+  --coco_eval \
+  --quantization fp16 \
+  --use_channels_last
 ```
 
 <a id="acknowledgement"></a>

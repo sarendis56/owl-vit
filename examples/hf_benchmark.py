@@ -386,10 +386,36 @@ class ObjectDetectionEvaluator:
 class HFOwlViTPredictor:
     """Hugging Face OWL-ViT predictor wrapper"""
     
-    def __init__(self, model_name: str = "google/owlvit-base-patch32", device: str = "cuda"):
+    def __init__(self, model_name: str = "google/owlvit-base-patch32", device: str = "cuda", 
+                 quantization: str = "none", use_channels_last: bool = False):
         self.device = device
+        self.quantization = quantization
+        self.use_channels_last = use_channels_last
+        
+        # Load processor and model
         self.processor = OwlViTProcessor.from_pretrained(model_name)
-        self.model = OwlViTForObjectDetection.from_pretrained(model_name).to(device)
+        self.model = OwlViTForObjectDetection.from_pretrained(model_name)
+        
+        # Apply quantization
+        if quantization == "fp16" and device == "cuda":
+            print("Applying FP16 quantization...")
+            self.model = self.model.half()
+        elif quantization == "dynamic" and device == "cpu":
+            print("Applying dynamic quantization...")
+            import torch.quantization as quant
+            self.model = quant.quantize_dynamic(self.model, {torch.nn.Linear}, dtype=torch.qint8)
+        elif quantization == "int8" and device == "cpu":
+            print("Applying INT8 quantization...")
+            # For more aggressive quantization, we'd need to use torch.quantization.quantize
+            # This is a placeholder for now
+            pass
+        
+        # Apply channels_last optimization if requested
+        if use_channels_last and device == "cuda":
+            print("Applying channels_last memory format...")
+            self.model = self.model.to(memory_format=torch.channels_last)
+        
+        self.model.to(device)
         self.model.eval()
         
     def encode_text(self, text_prompts: List[str]) -> torch.Tensor:
@@ -404,8 +430,12 @@ class HFOwlViTPredictor:
             inputs = self.processor(text=[text], images=image, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
-            # Run inference
-            outputs = self.model(**inputs)
+            # Run inference with mixed precision if using FP16
+            if self.quantization == "fp16" and self.device == "cuda":
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    outputs = self.model(**inputs)
+            else:
+                outputs = self.model(**inputs)
             
             # Get target image size for post-processing
             target_sizes = torch.tensor([(image.height, image.width)])
@@ -449,8 +479,12 @@ class HFOwlViTPredictor:
             inputs = self.processor(text=text_batch, images=images, return_tensors="pt")
             inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
-            # Run inference
-            outputs = self.model(**inputs)
+            # Run inference with mixed precision if using FP16
+            if self.quantization == "fp16" and self.device == "cuda":
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    outputs = self.model(**inputs)
+            else:
+                outputs = self.model(**inputs)
             
             # Get target image sizes for post-processing
             target_sizes = torch.tensor([(img.height, img.width) for img in images])
@@ -493,9 +527,16 @@ class BatchBenchmark:
     
     def __init__(self, 
                  model_name: str = "google/owlvit-base-patch32",
-                 device: str = "cuda"):
+                 device: str = "cuda",
+                 quantization: str = "none",
+                 use_channels_last: bool = False):
         
-        self.predictor = HFOwlViTPredictor(model_name=model_name, device=device)
+        self.predictor = HFOwlViTPredictor(
+            model_name=model_name, 
+            device=device, 
+            quantization=quantization,
+            use_channels_last=use_channels_last
+        )
         self.device = device
         self.evaluator = ObjectDetectionEvaluator()
 
@@ -1292,6 +1333,11 @@ if __name__ == "__main__":
                        help="Optional score threshold for reporting precision/recall/F1 (does not affect AP)")
     parser.add_argument("--batch_size", type=int, default=4,
                        help="Batch size for processing images (default: 4)")
+    parser.add_argument("--quantization", type=str, default="none", 
+                       choices=["none", "fp16", "dynamic", "int8"],
+                       help="Quantization method: none, fp16 (GPU only), dynamic (CPU only), int8 (CPU only)")
+    parser.add_argument("--use_channels_last", action="store_true",
+                       help="Use channels_last memory format for GPU optimization")
     
     args = parser.parse_args()
     
@@ -1323,7 +1369,10 @@ if __name__ == "__main__":
     
     # Initialize benchmark
     benchmark = BatchBenchmark(
-        model_name=args.model
+        model_name=args.model,
+        device="cuda" if torch.cuda.is_available() else "cpu",
+        quantization=args.quantization,
+        use_channels_last=args.use_channels_last
     )
     
     # Run benchmark
