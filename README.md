@@ -264,6 +264,9 @@ python3 secure_inference_benchmark.py \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
   --batch 8 \
+  --threshold 0.1 \
+  --viz_threshold 0.2 \
+  --eval_threshold 0.2 \
   --save_visualizations \
   --num_layers 2
 ```
