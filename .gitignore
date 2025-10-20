@@ -8,5 +8,5 @@ final_benchmark
 .vscode
 __pycache__
 full_benchmark
-benchmark_results
+*benchmark_results
 test_*

@@ -1081,7 +1081,7 @@ if __name__ == "__main__":
                        help="Output directory for results")
     parser.add_argument("--save_visualizations", action="store_true",
                        help="Save visualization images")
-    parser.add_argument("--max_images", type=int, default=None,
+    parser.add_argument("--max_images", type=int, default=100,
                        help="Maximum number of images to process")
     parser.add_argument("--warmup_runs", type=int, default=5,
                        help="Number of warmup runs")
