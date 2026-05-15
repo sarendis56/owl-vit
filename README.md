@@ -382,7 +382,25 @@ For the **Enc. 1 Layer** row, change `--num_layers 2` to `--num_layers 1` and re
 
 Absolute FPS will differ on other hardware (substantially higher on A100, for instance), but the relative overhead pattern between the rows should hold.
 
-### 6. Notes
+### 6. On-Site Side-by-Side Demo
+
+After all three benchmark scripts have produced their visualization folders (`./benchmark_results/`, `./secure_benchmark_results/`, `./secure_inference_benchmark_results/`), `examples/demo_sidebyside.py` replays the same image sequence in three columns — Original / Encrypted / Secure — each advancing on its own timer derived from that pipeline's measured FPS.
+
+```bash
+python3 demo_sidebyside.py \
+  --baseline_dir ./benchmark_results \
+  --encrypted_dir ./secure_benchmark_results \
+  --secure_dir ./secure_inference_benchmark_results \
+  --slowdown 4.0
+```
+
+- The per-column FPS is read automatically from `performance_metrics.fps` in the JSON file each benchmark wrote next to its visualizations (`benchmark_results.json`, `secure_benchmark_results.json`, `secure_inference_benchmark_results.json`). Override any column with `--baseline_fps / --encrypted_fps / --secure_fps`, and tune `--fallback_fps` for the case where a JSON is missing.
+- The display interval for each column is `slowdown / real_fps` seconds, so a `--slowdown 4.0` with Jetson Orin Nano numbers (10.69 / 10.69 / 7.41) gives roughly 0.37 s per baseline frame and 0.54 s per secure-inference frame — slow enough to read the labels, and visibly slower on the right than on the left.
+- The middle column shows the encrypted-but-unauthorized model. It advances at roughly the baseline rate (no decrypt overhead for an attacker) and produces the obviously-wrong dashed-orange top-K boxes from `--viz_topk`.
+- Each column loops independently once it reaches the end of its sequence, so the demo can run unattended.
+- The script auto-selects an interactive matplotlib backend (TkAgg / QtAgg / ...). If no display is available (e.g. a plain SSH session with no X forwarding), it exits with a hint to either reconnect with `ssh -X` or re-run with `--save demo.mp4` (also accepts `.gif`) to render the playback headlessly via ffmpeg / pillow. Use `--save_seconds N` to control the recording length.
+
+### 7. Notes
 
 - **Skipped script:** `rt_benchmark.py` uses the NanoOWL TensorRT-accelerated path via `nanoowl.owl_predictor.OwlPredictor`, which imports `torchvision.ops.roi_align` at module load time and requires a pre-built `.engine` file. It is not needed to reproduce any number in the paper and is intentionally omitted from this guide.
 - **PUF emulation:** `examples/emulator.py` ships with hardcoded challenge-response pairs for development. The default `OID-ALPHA` / `DID-0001-DEMO` are valid and will derive a usable master key. For a real deployment, replace the emulator with the Ultra96-V2 Arbiter PUF interface described in Section II of the paper.
