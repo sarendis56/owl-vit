@@ -211,67 +211,147 @@ live-edited text prompts.  To run the example
     - Example: [a face (interested, yawning / bored)]
     - Example: (indoors, outdoors)
 
-### For demo
+## ISCAS 2026 Demo Setup and Evaluation Guide
+
+This section describes how to set up the environment from scratch on commodity GPU hardware (e.g., NVIDIA A100) and run the three benchmark scripts that do **not** require the TensorRT-accelerated NanoOWL path. These three scripts are sufficient to reproduce the paper's Table 1 numbers (baseline accuracy/FPS, encrypted-model failure, and authorized on-the-fly decrypt-infer-re-encrypt overhead).
+
+### 1. Prerequisites
+
+- An NVIDIA GPU with CUDA support (tested on Jetson Orin Nano with JetPack 6 / CUDA 12.6, and on x86 hosts with CUDA 12.x).
+- Docker with NVIDIA Container Toolkit, or a host Python 3.10+ environment.
+- The Pascal VOC 2012 archive available at `/data/pascal.zip` inside the runtime environment. The benchmark scripts extract and convert annotations automatically when given `--extract_pascal_voc`.
+
+### 2. Environment Setup
+
+#### Option A: Docker (recommended)
+
+From the repository root, build and start the container:
+
+```bash
+docker build -t nanoowl:23-01 -f docker/23-01/Dockerfile docker/23-01
+docker run -it --rm --gpus all --ipc host --shm-size 14G \
+    -v $(pwd):/nanoowl \
+    -v /path/to/pascal.zip:/data/pascal.zip \
+    nanoowl:23-01
+```
+
+Inside the container:
+
+```bash
+cd /nanoowl
+python3 setup.py develop --user
+```
+
+#### Option B: Bare-metal Python
+
+```bash
+python3 -m pip install --upgrade pip
+python3 -m pip install torch transformers timm accelerate pillow numpy tqdm matplotlib opencv-python pycocotools
+git clone https://github.com/openai/CLIP.git && python3 -m pip install ./CLIP
+git clone <this-repo> nanoowl && cd nanoowl
+python3 setup.py develop --user
+```
+
+The three scripts used below depend only on `torch`, `transformers`, `pillow`, `numpy`, `tqdm`, `matplotlib`, and (optionally) `pycocotools`. They do **not** require `torchvision`, `tensorrt`, or `torch2trt`.
+
+### 3. Dataset Preparation
+
+The first invocation of any script with `--extract_pascal_voc` extracts `/data/pascal.zip` into `./pascal_voc_extracted/` and builds a `pascal_voc_annotations.json` file. Subsequent runs detect the existing annotations and skip re-extraction, so the flag can be left on for convenience.
+
+### 4. Running the Benchmarks
+
+All commands are run from the `examples/` directory:
 
 ```bash
 cd examples
-python3 rt_benchmark.py \
-  --extract_pascal_voc \
-  --dataset ./pascal_voc_extracted \
-  --max_images 100 \
-  --use_pascal_voc_prompts \
-  --threshold 0.1 \
-  --viz_threshold 0.2 \
-  --eval_threshold 0.2 \
-  --image_encoder_engine ../data/owl_image_encoder_patch32.engine \
-  --output_dir ./rt_benchmark \
-  --save_visualizations \
-  --coco_eval
 ```
+
+#### 4.1 Baseline (unprotected model)
+
+Produces the **Baseline** column of Table 1 — mAP@0.5 ≈ 0.61 and ~10.69 FPS on Jetson Orin Nano with batch size 8 and fp16.
 
 ```bash
 python3 hf_benchmark.py \
   --extract_pascal_voc \
-  --use_pascal_voc_prompts \
   --dataset ./pascal_voc_extracted \
+  --use_pascal_voc_prompts \
   --max_images 100 \
+  --batch_size 8 \
+  --quantization fp16 \
+  --use_channels_last \
   --threshold 0.1 \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
   --output_dir ./benchmark_results \
   --save_visualizations \
-  --coco_eval \
-  --use_channels_last \
-  --batch 8 \
-  --quantization fp16
+  --coco_eval
 ```
 
-Encryption:
+Output:
+
+- Console: per-class AP, COCO mAP, FPS, latency breakdown.
+- `./benchmark_results/result_*.jpg`: annotated detection visualizations.
+- `./benchmark_results/benchmark_results.json`: structured metrics.
+
+#### 4.2 Unauthorized Device (statically encrypted model)
+
+Simulates an attacker running the encrypted weights without the correct PUF-derived key. Produces the **Enc. 1 Layer / Enc. 2 Layers** mAP collapse (≈ 0.00) in Table 1. The script encrypts the first two transformer layers in place using a key derived from a default PUF Owner/Device ID, then runs inference on the encrypted model.
+
 ```bash
 python3 model_encryption.py \
   --extract_pascal_voc \
   --dataset ./pascal_voc_extracted \
   --max_images 100 \
-  --coco_eval \
-  --save_visualizations \
+  --batch_size 8 \
   --viz_threshold 0.05 \
-  --batch 8
+  --output_dir ./secure_benchmark_results \
+  --save_visualizations \
+  --coco_eval
 ```
+
+The visualizations in `./secure_benchmark_results/result_*.jpg` will show either no detections or visibly wrong boxes, illustrating the catastrophic failure on unauthorized hardware.
+
+#### 4.3 Authorized Device (per-batch decrypt-infer-re-encrypt)
+
+Produces the FPS rows for **Enc. 1 Layer** (8.58 FPS) and **Enc. 2 Layers** (7.41 FPS) of Table 1 while restoring full Baseline accuracy. The model is held in encrypted form at rest, and decrypted into plaintext only for the duration of each forward pass.
+
+Two protected layers (matches the paper's Enc. 2 Layers column):
 
 ```bash
 python3 secure_inference_benchmark.py \
   --extract_pascal_voc \
-  --use_pascal_voc_prompts \
   --dataset ./pascal_voc_extracted \
+  --use_pascal_voc_prompts \
   --max_images 100 \
   --batch 8 \
+  --num_layers 2 \
+  --quantization fp16 \
   --threshold 0.1 \
   --viz_threshold 0.2 \
   --eval_threshold 0.2 \
+  --output_dir ./secure_inference_benchmark_results \
   --save_visualizations \
-  --num_layers 2 \
-  --quantization fp16
+  --coco_eval
 ```
+
+For the **Enc. 1 Layer** row, change `--num_layers 2` to `--num_layers 1` and re-run.
+
+### 5. Expected Results (Pascal VOC, batch 8, fp16, 100 images)
+
+| Script                                         | Layers Encrypted | mAP@0.5 | FPS (Jetson Orin Nano) |
+| ---------------------------------------------- | ---------------- | ------- | ---------------------- |
+| `hf_benchmark.py`                              | 0 (Baseline)     | ~0.61   | ~10.69                 |
+| `model_encryption.py`                          | 2 (Unauthorized) | ~0.00   | n/a                    |
+| `secure_inference_benchmark.py --num_layers 1` | 1 (Authorized)   | ~0.61   | ~8.58                  |
+| `secure_inference_benchmark.py --num_layers 2` | 2 (Authorized)   | ~0.61   | ~7.41                  |
+
+Absolute FPS will differ on other hardware (substantially higher on A100, for instance), but the relative overhead pattern between the rows should hold.
+
+### 6. Notes
+
+- **Skipped script:** `rt_benchmark.py` uses the NanoOWL TensorRT-accelerated path via `nanoowl.owl_predictor.OwlPredictor`, which imports `torchvision.ops.roi_align` at module load time and requires a pre-built `.engine` file. It is not needed to reproduce any number in the paper and is intentionally omitted from this guide.
+- **PUF emulation:** `examples/emulator.py` ships with hardcoded challenge-response pairs for development. The default `OID-ALPHA` / `DID-0001-DEMO` are valid and will derive a usable master key. For a real deployment, replace the emulator with the Ultra96-V2 Arbiter PUF interface described in Section II of the paper.
+- **Disk usage:** `--save_visualizations` writes one JPEG per processed image. For the on-site live demonstration, these visualizations are what visitors see — no camera is needed.
 
 <a id="acknowledgement"></a>
 ## 👏 Acknowledgement

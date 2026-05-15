@@ -10,3 +10,4 @@ __pycache__
 full_benchmark
 *benchmark_results
 test_*
+ChaosFormer
