@@ -435,12 +435,12 @@ class HFOwlViTPredictor:
             target_sizes = torch.tensor([(image.height, image.width)])
             
             # Post-process to get final results
-            results = self.processor.post_process_object_detection(
-                outputs=outputs, 
-                target_sizes=target_sizes, 
+            results = self.processor.image_processor.post_process_object_detection(
+                outputs=outputs,
+                target_sizes=target_sizes,
                 threshold=threshold
             )
-            
+
             # Extract results for the first (and only) image
             result = results[0]
             boxes = result["boxes"]
@@ -484,12 +484,12 @@ class HFOwlViTPredictor:
             target_sizes = torch.tensor([(img.height, img.width) for img in images])
             
             # Post-process to get final results
-            results = self.processor.post_process_object_detection(
-                outputs=outputs, 
-                target_sizes=target_sizes, 
+            results = self.processor.image_processor.post_process_object_detection(
+                outputs=outputs,
+                target_sizes=target_sizes,
                 threshold=threshold
             )
-            
+
             # Process results for each image in the batch
             batch_outputs = []
             for i, result in enumerate(results):
@@ -1222,10 +1222,10 @@ def parse_voc_annotation(xml_path: str):
             ymax_elem = bbox.find('ymax')
             
             if all(elem is not None and elem.text is not None for elem in [xmin_elem, ymin_elem, xmax_elem, ymax_elem]):
-                xmin = int(xmin_elem.text) - 1
-                ymin = int(ymin_elem.text) - 1
-                xmax = int(xmax_elem.text) - 1
-                ymax = int(ymax_elem.text) - 1
+                xmin = int(float(xmin_elem.text)) - 1
+                ymin = int(float(ymin_elem.text)) - 1
+                xmax = int(float(xmax_elem.text)) - 1
+                ymax = int(float(ymax_elem.text)) - 1
                 
                 objects.append({
                     'name': name,
