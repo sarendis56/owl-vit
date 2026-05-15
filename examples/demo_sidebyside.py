@@ -155,6 +155,10 @@ def main():
                              "instead of opening a window. Useful on headless machines.")
     parser.add_argument("--save_seconds", type=float, default=30.0,
                         help="Duration to record when --save is used")
+    parser.add_argument("--title_fontsize", type=float, default=20.0,
+                        help="Font size for per-column titles")
+    parser.add_argument("--suptitle_fontsize", type=float, default=16.0,
+                        help="Font size for the figure-level subtitle")
     args = parser.parse_args()
 
     if args.save is None and _INTERACTIVE_BACKEND is None:
@@ -220,13 +224,17 @@ def main():
     indices = [0, 0, 0]
     next_advance = [time.monotonic() + iv for iv in intervals]
     for ax, title, seq, fps, iv in zip(axes, titles, sequences, real_fps, intervals):
-        ax.set_title(f"{title}\nReal: {fps:.2f} FPS   |   Display: {1.0 / iv:.2f} FPS")
+        ax.set_title(
+            f"{title}\nReal: {fps:.2f} FPS   |   Display: {1.0 / iv:.2f} FPS",
+            fontsize=args.title_fontsize,
+            fontweight="bold",
+        )
         ax.axis("off")
         images.append(ax.imshow(seq[0]))
 
     fig.suptitle(
         f"Slowdown x{args.slowdown:g} (display = slowdown / real-FPS)",
-        fontsize=11,
+        fontsize=args.suptitle_fontsize,
     )
 
     def tick(_frame):
