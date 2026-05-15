@@ -218,7 +218,7 @@ This section describes how to set up the environment from scratch on commodity G
 ### 1. Prerequisites
 
 - An NVIDIA GPU with CUDA support (tested on Jetson Orin Nano with JetPack 6 / CUDA 12.6, and on x86 hosts with CUDA 12.x).
-- Docker with NVIDIA Container Toolkit, or a host Python 3.10+ environment.
+- Docker with NVIDIA Container Toolkit (recommended for Jetson Orin), or a host Python 3.10+ environment (commodity GPU).
 - The Pascal VOC 2012 archive available at `/data/pascal.zip` inside the runtime environment. The benchmark scripts extract and convert annotations automatically when given `--extract_pascal_voc`.
 
 ### 2. Environment Setup
@@ -242,17 +242,43 @@ cd /nanoowl
 python3 setup.py develop --user
 ```
 
-#### Option B: Bare-metal Python
+#### Option B: Bare-metal Python with `uv`
+
+Clone the repository and create an isolated environment managed by `uv`:
 
 ```bash
-python3 -m pip install --upgrade pip
-python3 -m pip install torch transformers timm accelerate pillow numpy tqdm matplotlib opencv-python pycocotools
-git clone https://github.com/openai/CLIP.git && python3 -m pip install ./CLIP
 git clone <this-repo> nanoowl && cd nanoowl
-python3 setup.py develop --user
+uv venv --python 3.10
+source .venv/bin/activate
 ```
 
-The three scripts used below depend only on `torch`, `transformers`, `pillow`, `numpy`, `tqdm`, `matplotlib`, and (optionally) `pycocotools`. They do **not** require `torchvision`, `tensorrt`, or `torch2trt`.
+Install PyTorch matching your CUDA version (adjust the index URL for your CUDA toolkit; the example below targets CUDA 12.1):
+
+```bash
+uv pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
+
+Install the remaining runtime dependencies. None of the three benchmark scripts used in this guide require `torchvision`, `tensorrt`, or `torch2trt`.
+
+```bash
+uv pip install transformers timm accelerate pillow numpy tqdm matplotlib opencv-python pycocotools
+uv pip install git+https://github.com/openai/CLIP.git
+```
+
+Install this repository in editable mode so the `nanoowl` package and its `examples/` scripts are importable from the active environment:
+
+```bash
+uv pip install -e .
+```
+
+Verify the install:
+
+```bash
+python -c "import torch; print(torch.cuda.is_available(), torch.version.cuda)"
+python -c "from transformers import OwlViTForObjectDetection; print('ok')"
+```
+
+Both commands should succeed and the first should report `True` along with your CUDA version. For all subsequent commands in this guide, ensure the environment is active (`source .venv/bin/activate`) before running the benchmark scripts.
 
 ### 3. Dataset Preparation
 
