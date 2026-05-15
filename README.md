@@ -391,7 +391,7 @@ python3 demo_sidebyside.py \
   --baseline_dir ./benchmark_results \
   --encrypted_dir ./secure_benchmark_results \
   --secure_dir ./secure_inference_benchmark_results \
-  --slowdown 30.0
+  --slowdown 50.0
 ```
 
 - The per-column FPS is read automatically from `performance_metrics.fps` in the JSON file each benchmark wrote next to its visualizations (`benchmark_results.json`, `secure_benchmark_results.json`, `secure_inference_benchmark_results.json`). Override any column with `--baseline_fps / --encrypted_fps / --secure_fps`, and tune `--fallback_fps` for the case where a JSON is missing.
