@@ -9,17 +9,64 @@ References:
 
 import torch
 import numpy as np
-from typing import List, Union, Tuple
+from typing import Dict, List, Tuple, Union
+
+
+# Cache for coordinate meshgrids — these depend only on (h, w, device), not on
+# the matrix values or the key, so the secure-inference decrypt-on-the-fly path
+# can reuse them across every batch.
+_COORDINATE_GRID_CACHE: Dict[Tuple[int, int, str], Tuple[torch.Tensor, torch.Tensor]] = {}
+
+
+def _get_coordinate_grids(h: int, w: int, device: torch.device) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Return cached (y_grid, x_grid) for the given shape/device."""
+    cache_key = (h, w, str(device))
+    cached = _COORDINATE_GRID_CACHE.get(cache_key)
+    if cached is not None:
+        y_grid, x_grid = cached
+        if y_grid.device == device:
+            return y_grid, x_grid
+    y_grid, x_grid = torch.meshgrid(
+        torch.arange(h, device=device, dtype=torch.long),
+        torch.arange(w, device=device, dtype=torch.long),
+        indexing='ij',
+    )
+    _COORDINATE_GRID_CACHE[cache_key] = (y_grid, x_grid)
+    return y_grid, x_grid
+
+
+def _matrix_power_mod(matrix: np.ndarray, power: int, mod: int) -> np.ndarray:
+    """Compute matrix^power mod ``mod`` via binary exponentiation (O(log power))."""
+    if power == 0:
+        return np.array([[1, 0], [0, 1]], dtype=np.int64)
+    if power == 1:
+        return matrix.astype(np.int64) % mod
+    result = np.array([[1, 0], [0, 1]], dtype=np.int64)
+    base = matrix.astype(np.int64) % mod
+    while power > 0:
+        if power & 1:
+            result = (result @ base) % mod
+        base = (base @ base) % mod
+        power >>= 1
+    return result
 
 
 def arnold(matrix: Union[torch.Tensor, np.ndarray], key: List[int]) -> torch.Tensor:
     """
     Apply Arnold Cat Map transformation to encrypt a matrix.
-    
+
+    Optimizations vs. the naive loop (port from ChaosFormer):
+      1. The N-step coordinate iteration is replaced by a single
+         transformation using ``M^N mod w`` computed via binary
+         exponentiation on the 2x2 integer matrix (O(log N) Python work).
+      2. The coordinate meshgrids are cached per ``(h, w, device)`` so
+         repeated calls (e.g. per-batch decrypt-on-the-fly) skip the
+         meshgrid construction entirely.
+
     The Arnold Cat Map is defined by the transformation:
     [x']   [1 1] [x]     [a b] [x]
     [y'] = [1 2] [y] or  [c d] [y]  (mod N)
-    
+
     where the determinant (ad - bc) ≡ 1 (mod N) for invertibility.
     
     Args:
@@ -53,27 +100,28 @@ def arnold(matrix: Union[torch.Tensor, np.ndarray], key: List[int]) -> torch.Ten
 
     device = matrix.device
 
-    # Create original coordinate meshgrid on the same device as the matrix
-    y_orig_grid, x_orig_grid = torch.meshgrid(
-        torch.arange(h, device=device, dtype=torch.long),
-        torch.arange(w, device=device, dtype=torch.long),
-        indexing='ij'
-    )
-    # Flatten coordinates for efficient processing
-    x_coords_to_transform = x_orig_grid.flatten()
-    y_coords_to_transform = y_orig_grid.flatten()
+    # --- Optimization 1: closed-form M^N mod w via binary exponentiation -----
+    # The N-iteration coordinate loop is equivalent to applying the 2x2
+    # transformation matrix raised to the N-th power once. Done in pure Python
+    # on a 2x2 int matrix, so cost is negligible vs. the per-element tensor ops.
+    transformation_matrix = np.array([[a, b], [c, d]], dtype=np.int64)
+    final_matrix = _matrix_power_mod(transformation_matrix, N, w)
+    a_f = int(final_matrix[0, 0])
+    b_f = int(final_matrix[0, 1])
+    c_f = int(final_matrix[1, 0])
+    d_f = int(final_matrix[1, 1])
 
-    # Transform coordinates N times to find final destinations (no matrix operations yet)
-    final_dest_x = x_coords_to_transform.clone()
-    final_dest_y = y_coords_to_transform.clone()
+    # --- Optimization 2: cached coordinate grids ------------------------------
+    y_orig_grid, x_orig_grid = _get_coordinate_grids(h, w, device)
+    x_coords = x_orig_grid.flatten()  # column indices (x)
+    y_coords = y_orig_grid.flatten()  # row indices (y)
 
-    for _ in range(N):
-        next_dest_x = (a * final_dest_x + b * final_dest_y) % w
-        next_dest_y = (c * final_dest_x + d * final_dest_y) % h
-        final_dest_x = next_dest_x
-        final_dest_y = next_dest_y
+    # Single-shot transform (no loop) — same convention as the original loop:
+    # x' = (a*x + b*y) mod w, y' = (c*x + d*y) mod h.
+    final_dest_x = (a_f * x_coords + b_f * y_coords) % w
+    final_dest_y = (c_f * x_coords + d_f * y_coords) % h
 
-    # Calculate final destination indices for scatter operation
+    # Flat scatter index, row-major: row * w + col == final_dest_y * w + final_dest_x.
     final_dest_flat_indices = (final_dest_y * w + final_dest_x).long()
 
     # Reshape original matrix and prepare output buffer
