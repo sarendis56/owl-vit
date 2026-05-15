@@ -38,10 +38,19 @@ def split_attn_ffn(layer_key: bytes) -> Tuple[bytes, bytes]:
     return layer_key[:16], layer_key[16:32]
 
 
-def subkey_to_arnold_params(subkey: bytes, matrix_size: int) -> Tuple[int, int, int, int, int]:
-    # Use canonical invertible form a=1, b=p, c=q, d=p*q+1 (mod matrix_size)
-    # iterations in [3..7] for reasonable scrambling
-    N = 3 + (subkey[0] % 5)
+def subkey_to_arnold_params(
+    subkey: bytes,
+    matrix_size: int,
+    n_override: int = None,
+) -> Tuple[int, int, int, int, int]:
+    # Use canonical invertible form a=1, b=p, c=q, d=p*q+1 (mod matrix_size).
+    # ``n_override`` pins N to a fixed iteration count (used by the demo CLIs
+    # to make the secure-inference slowdown controllable). When None, sample
+    # in [3..7] from the subkey for reasonable scrambling.
+    if n_override is not None:
+        N = int(n_override)
+    else:
+        N = 3 + (subkey[0] % 5)
     # Derive p, q from subkey bytes for good spread
     p_seed = int.from_bytes(subkey[1:5], "big", signed=False)
     q_seed = int.from_bytes(subkey[5:9], "big", signed=False)

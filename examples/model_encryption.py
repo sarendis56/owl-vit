@@ -5,7 +5,7 @@ Secure encryption and benchmarking script for OWL-ViT using a PUF-emulated key.
 Steps:
 1) Obtain master key K from PUF emulator using OID and DID
 2) Load OWL-ViT model
-3) Encrypt first two transformer blocks' attention and FFN weights in-place
+3) Encrypt the first --num_layers transformer blocks' attention and FFN weights in-place
 4) Run the existing batch benchmark pipeline on a dataset
 5) Save results and an encrypted checkpoint
 
@@ -184,9 +184,10 @@ def collect_ffn_weights(block) -> dict:
     return {"intermediate": inter, "output": out}
 
 
-def encrypt_first_two_layers_inplace(model, master_key: bytes, device: str = "cuda"):
+def encrypt_first_n_layers_inplace(model, master_key: bytes, num_layers: int,
+                                   acm_n: int = 11, device: str = "cuda"):
     blocks = get_transformer_blocks(model)
-    num_layers = min(2, len(blocks))
+    num_layers = min(num_layers, len(blocks))
     for layer_index in range(num_layers):
         block = blocks[layer_index]
         hidden_size, intermediate_size = infer_hidden_and_intermediate_sizes(block)
@@ -194,7 +195,7 @@ def encrypt_first_two_layers_inplace(model, master_key: bytes, device: str = "cu
         layer_key = derive_layer_key(master_key, layer_index)
         attn_subkey, ffn_subkey = split_attn_ffn(layer_key)
 
-        arnold_key = subkey_to_arnold_params(attn_subkey, hidden_size)
+        arnold_key = subkey_to_arnold_params(attn_subkey, hidden_size, n_override=acm_n)
         perm_password = subkey_to_perm_password(ffn_subkey)
 
         de = DualEncryption(
@@ -225,7 +226,7 @@ def encrypt_first_two_layers_inplace(model, master_key: bytes, device: str = "cu
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Encrypt first two layers of OWL-ViT and benchmark")
+    parser = argparse.ArgumentParser(description="Encrypt the first N transformer layers of OWL-ViT and benchmark")
     parser.add_argument("--dataset", type=str, required=True, help="Path to dataset directory or annotation JSON file")
     parser.add_argument("--oid", type=str, default="OID-ALPHA", help="Owner ID for PUF challenge")
     parser.add_argument("--did", type=str, default="DID-0001-DEMO", help="Device ID for PUF lookup")
@@ -240,6 +241,10 @@ def main():
     parser.add_argument("--viz_threshold", type=float, default=0.5, help="Visualization threshold")
     parser.add_argument("--viz_topk", type=int, default=5,
                         help="When no detections pass viz_threshold, draw the top-K raw predictions instead (0 disables)")
+    parser.add_argument("--num_layers", type=int, default=6,
+                        help="Number of initial transformer layers to encrypt in-place")
+    parser.add_argument("--acm_n", type=int, default=11,
+                        help="ACM iteration count N (fixed; override the PUF-derived value in [3,7])")
     parser.add_argument("--save_visualizations", action="store_true", help="Save visualization images")
     parser.add_argument("--use_channels_last", action="store_true", help="Use channels_last for GPU")
     parser.add_argument("--create_sample_dataset", action="store_true", help="Create a small sample dataset for testing")
@@ -270,8 +275,14 @@ def main():
     model = predictor.model
     model.eval()
 
-    # 3) Encrypt first two transformer blocks in-place
-    encrypt_first_two_layers_inplace(model, master_key, device=device)
+    # 3) Encrypt the first --num_layers transformer blocks in-place (ACM on
+    # attention weights with iteration count --acm_n, permutation on FFN).
+    encrypt_first_n_layers_inplace(
+        model, master_key,
+        num_layers=args.num_layers,
+        acm_n=args.acm_n,
+        device=device,
+    )
 
     # Prepare dataset path similar to hf_benchmark
     if args.extract_pascal_voc:

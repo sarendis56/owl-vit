@@ -328,7 +328,7 @@ Output:
 
 #### 4.2 Unauthorized Device (statically encrypted model)
 
-Simulates an attacker running the encrypted weights without the correct PUF-derived key. Produces the **Enc. 1 Layer / Enc. 2 Layers** mAP collapse (≈ 0.00) in Table 1. The script encrypts the first two transformer layers in place using a key derived from a default PUF Owner/Device ID, then runs inference on the encrypted model.
+Simulates an attacker running the encrypted weights without the correct PUF-derived key. Produces the **Enc. 1 Layer / Enc. 2 Layers** mAP collapse (≈ 0.00) in Table 1. The script encrypts the first `--num_layers` transformer layers (default **6**) in place using a key derived from a default PUF Owner/Device ID, with ACM iteration count fixed at `--acm_n` (default **11**), then runs inference on the encrypted model.
 
 ```bash
 python3 model_encryption.py \
@@ -350,7 +350,7 @@ The `--viz_topk` flag is also available on `hf_benchmark.py` but is rarely trigg
 
 Produces the FPS rows for **Enc. 1 Layer** (8.58 FPS) and **Enc. 2 Layers** (7.41 FPS) of Table 1 while restoring full Baseline accuracy. The model is held in encrypted form at rest, and decrypted into plaintext only for the duration of each forward pass.
 
-Two protected layers (matches the paper's Enc. 2 Layers column):
+By default the script protects the first **6** transformer layers (`--num_layers 6`) with ACM iteration count `--acm_n 11`, matching the unauthorized script's encryption scheme. For Table 1 reproduction, set `--num_layers` to 1 or 2.
 
 ```bash
 python3 secure_inference_benchmark.py \
@@ -359,7 +359,6 @@ python3 secure_inference_benchmark.py \
   --use_pascal_voc_prompts \
   --max_images 100 \
   --batch 8 \
-  --num_layers 2 \
   --quantization fp16 \
   --threshold 0.1 \
   --viz_threshold 0.2 \
@@ -369,7 +368,7 @@ python3 secure_inference_benchmark.py \
   --coco_eval
 ```
 
-For the **Enc. 1 Layer** row, change `--num_layers 2` to `--num_layers 1` and re-run.
+For the **Enc. 1 Layer** row, add `--num_layers 1` and re-run; for **Enc. 2 Layers** use `--num_layers 2`. Both unauthorized and authorized scripts must be run with matching `--num_layers` / `--acm_n` so the keys line up.
 
 ### 5. Expected Results (Pascal VOC, batch 8, fp16, 100 images)
 

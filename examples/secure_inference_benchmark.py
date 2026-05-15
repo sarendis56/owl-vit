@@ -144,10 +144,12 @@ def collect_ffn_weights(block) -> dict:
 
 
 class DecryptOnTheFlyPredictor(HFOwlViTPredictor):
-    def __init__(self, master_key: bytes, num_layers: int, device: str = "cuda", **kwargs):
+    def __init__(self, master_key: bytes, num_layers: int, acm_n: int = 11,
+                 device: str = "cuda", **kwargs):
         super().__init__(device=device, **kwargs)
         self.master_key = master_key
         self.num_layers = num_layers
+        self.acm_n = acm_n
 
     def _apply_crypto(self, decrypt: bool):
         model = self.model
@@ -159,7 +161,7 @@ class DecryptOnTheFlyPredictor(HFOwlViTPredictor):
             hidden_size, _ = infer_hidden_and_intermediate_sizes(block)
             layer_key = derive_layer_key(self.master_key, layer_index)
             attn_subkey, ffn_subkey = split_attn_ffn(layer_key)
-            arnold_key = subkey_to_arnold_params(attn_subkey, hidden_size)
+            arnold_key = subkey_to_arnold_params(attn_subkey, hidden_size, n_override=self.acm_n)
             perm_password = subkey_to_perm_password(ffn_subkey)
             de = DualEncryption(
                 arnold_key=arnold_key,
@@ -220,7 +222,9 @@ def main():
     parser.add_argument("--use_pascal_voc_prompts", action="store_true", default=True, help="Use Pascal VOC prompts")
     parser.add_argument("--coco_eval", action="store_true", default=True, help="Compute COCO metrics")
     parser.add_argument("--eval_threshold", type=float, default=0.2, help="Operating point metrics threshold")
-    parser.add_argument("--num_layers", type=int, default=2, help="Number of initial layers to protect")
+    parser.add_argument("--num_layers", type=int, default=6, help="Number of initial layers to protect")
+    parser.add_argument("--acm_n", type=int, default=11,
+                        help="ACM iteration count N (fixed; override the PUF-derived value in [3,7])")
     parser.add_argument("--assume_encrypted", action="store_true", help="Assume model is already encrypted at rest")
     parser.add_argument("--quantization", type=str, default="none", 
                         choices=["none", "fp16"],
@@ -259,6 +263,7 @@ def main():
     predictor = DecryptOnTheFlyPredictor(
         master_key=master_key,
         num_layers=args.num_layers,
+        acm_n=args.acm_n,
         device=device,
         model_name=args.model,
         quantization=args.quantization,
