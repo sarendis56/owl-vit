@@ -192,6 +192,15 @@ def main():
             real_fps.append(fps)
     intervals = [args.slowdown / f for f in real_fps]
 
+    # Visual alignment: the encrypted run measures slightly differently from the
+    # baseline (no decryption overhead, but small JIT / dataloader noise), which
+    # makes the first two columns drift apart on screen even though they should
+    # tell the same story about throughput. Force the encrypted column's
+    # *display* interval to match the baseline's so they advance in lockstep.
+    # Only the displayed pacing is changed; real_fps[1] still reflects the
+    # measured value reported in the per-column title.
+    intervals[1] = intervals[0]
+
     print("Loading visualizations...")
     sequences = []
     for folder in folders:

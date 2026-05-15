@@ -391,12 +391,12 @@ python3 demo_sidebyside.py \
   --baseline_dir ./benchmark_results \
   --encrypted_dir ./secure_benchmark_results \
   --secure_dir ./secure_inference_benchmark_results \
-  --slowdown 4.0
+  --slowdown 10.0
 ```
 
 - The per-column FPS is read automatically from `performance_metrics.fps` in the JSON file each benchmark wrote next to its visualizations (`benchmark_results.json`, `secure_benchmark_results.json`, `secure_inference_benchmark_results.json`). Override any column with `--baseline_fps / --encrypted_fps / --secure_fps`, and tune `--fallback_fps` for the case where a JSON is missing.
-- The display interval for each column is `slowdown / real_fps` seconds, so a `--slowdown 4.0` with Jetson Orin Nano numbers (10.69 / 10.69 / 7.41) gives roughly 0.37 s per baseline frame and 0.54 s per secure-inference frame — slow enough to read the labels, and visibly slower on the right than on the left.
-- The middle column shows the encrypted-but-unauthorized model. It advances at roughly the baseline rate (no decrypt overhead for an attacker) and produces the obviously-wrong dashed-orange top-K boxes from `--viz_topk`.
+- The display interval for each column is `slowdown / real_fps` seconds.
+- The middle column shows the encrypted-but-unauthorized model. It advances at roughly the baseline rate (no decrypt overhead for an attacker) and produces the obviously-wrong dashed-orange top-K boxes from `--viz_topk`. Its *display* interval is forced equal to the baseline's so the two left-hand columns advance in lockstep on screen — the measured FPS in each per-column title still reflects the real (slightly noisy) value read from JSON; only the display pacing is aligned.
 - Each column loops independently once it reaches the end of its sequence, so the demo can run unattended.
 - The script auto-selects an interactive matplotlib backend (TkAgg / QtAgg / ...). If no display is available (e.g. a plain SSH session with no X forwarding), it exits with a hint to either reconnect with `ssh -X` or re-run with `--save demo.mp4` (also accepts `.gif`) to render the playback headlessly via ffmpeg / pillow. Use `--save_seconds N` to control the recording length.
 - For `--save *.mp4` you need the `ffmpeg` command-line tool. The cleanest option in a `uv` / `venv` workflow is `uv pip install imageio-ffmpeg`, which drops a static ffmpeg binary inside the venv; the demo script auto-wires it into matplotlib (prints the path it picks up at startup). Alternatives: `sudo apt install ffmpeg` (system-wide) or `conda install -c conda-forge -n base ffmpeg`. The PyPI `ffmpeg` package is a different, unrelated wrapper and will not help. If you'd rather not install anything, use `--save demo.gif` (Pillow writer, no extra dependency).
