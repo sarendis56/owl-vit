@@ -717,6 +717,7 @@ class BatchBenchmark:
                      max_images: Optional[int] = None,
                      warmup_runs: int = 5,
                      viz_threshold: float = 0.5,
+                     viz_topk: int = 5,
                      coco_eval: bool = False,
                      eval_threshold: Optional[float] = None,
                      batch_size: int = 4,
@@ -833,8 +834,28 @@ class BatchBenchmark:
                                     ax.text(x1, max(0, y1-5), f"{prompts[label.item()]}: {score.item():.2f}",
                                             fontsize=10, color='red', weight='bold')
                                 drew_any = True
-                            # Always save an image; annotate when no detections
-                            if not drew_any:
+                            # Fallback: when nothing passes viz_threshold, draw the top-K raw
+                            # predictions so the failure mode (e.g. encrypted weights) is visible.
+                            if not drew_any and viz_topk > 0 and output is not None and len(output.boxes) > 0:
+                                k = min(viz_topk, len(output.scores))
+                                topk_scores, topk_idx = torch.topk(output.scores, k)
+                                for idx, score in zip(topk_idx.tolist(), topk_scores.tolist()):
+                                    box = output.boxes[idx].detach().cpu().numpy()
+                                    label = output.labels[idx].item()
+                                    x1, y1, x2, y2 = box
+                                    width = x2 - x1
+                                    height = y2 - y1
+                                    rect = patches.Rectangle((x1, y1), width, height,
+                                                             linewidth=2, edgecolor='orange',
+                                                             linestyle='--', facecolor='none')
+                                    ax.add_patch(rect)
+                                    ax.text(x1, max(0, y1-5), f"{prompts[label]}: {score:.3f}",
+                                            fontsize=10, color='orange', weight='bold')
+                                ax.text(5, 15,
+                                        f"No detections above thr={viz_threshold:.2f}; showing top-{k} raw predictions",
+                                        fontsize=11, color='yellow',
+                                        bbox=dict(facecolor='black', alpha=0.5, pad=3))
+                            elif not drew_any:
                                 ax.text(5, 15, f"No detections (thr={viz_threshold:.2f})", fontsize=12,
                                         color='yellow', bbox=dict(facecolor='black', alpha=0.5, pad=3))
                             ax.set_title(f"Detection Results - Image {batch_start + i}")
@@ -1318,6 +1339,8 @@ if __name__ == "__main__":
                        help="Use Pascal VOC class names as prompts")
     parser.add_argument("--viz_threshold", type=float, default=0.5,
                        help="Score threshold used only for visualization")
+    parser.add_argument("--viz_topk", type=int, default=5,
+                       help="When no detections pass viz_threshold, draw the top-K raw predictions instead (0 disables)")
     parser.add_argument("--coco_eval", action="store_true",
                        help="Compute COCO-style metrics with pycocotools")
     parser.add_argument("--eval_threshold", type=float, default=None,
@@ -1379,6 +1402,7 @@ if __name__ == "__main__":
         max_images=args.max_images,
         warmup_runs=args.warmup_runs,
         viz_threshold=args.viz_threshold,
+        viz_topk=args.viz_topk,
         coco_eval=args.coco_eval,
         eval_threshold=args.eval_threshold,
         batch_size=args.batch_size,

@@ -238,6 +238,8 @@ def main():
     parser.add_argument("--warmup_runs", type=int, default=5, help="Warmup iterations")
     parser.add_argument("--batch_size", type=int, default=2, help="Batch size")
     parser.add_argument("--viz_threshold", type=float, default=0.5, help="Visualization threshold")
+    parser.add_argument("--viz_topk", type=int, default=5,
+                        help="When no detections pass viz_threshold, draw the top-K raw predictions instead (0 disables)")
     parser.add_argument("--save_visualizations", action="store_true", help="Save visualization images")
     parser.add_argument("--use_channels_last", action="store_true", help="Use channels_last for GPU")
     parser.add_argument("--create_sample_dataset", action="store_true", help="Create a small sample dataset for testing")
@@ -348,6 +350,7 @@ def main():
         max_images=args.max_images,
         warmup_runs=args.warmup_runs,
         viz_threshold=args.viz_threshold,
+        viz_topk=args.viz_topk,
         coco_eval=args.coco_eval,
         eval_threshold=args.eval_threshold,
         batch_size=args.batch_size,

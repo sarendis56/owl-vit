@@ -308,6 +308,7 @@ def main():
         max_images=args.max_images,
         warmup_runs=args.warmup_runs,
         viz_threshold=args.viz_threshold,
+        viz_topk=0,
         coco_eval=args.coco_eval,
         eval_threshold=args.eval_threshold,
         batch_size=args.batch,

@@ -342,7 +342,9 @@ python3 model_encryption.py \
   --coco_eval
 ```
 
-The visualizations in `./secure_benchmark_results/result_*.jpg` will show either no detections or visibly wrong boxes, illustrating the catastrophic failure on unauthorized hardware.
+The visualizations in `./secure_benchmark_results/result_*.jpg` will show visibly wrong boxes, illustrating the catastrophic failure on unauthorized hardware. Because the encrypted model's confidence scores collapse so far that nothing typically clears `--viz_threshold`, the visualizer falls back to drawing the top-K (default `5`) raw predictions per image — rendered as dashed orange boxes with a banner labeling them as below-threshold "top-K raw predictions". Override the count with `--viz_topk N` (set `--viz_topk 0` to disable the fallback and reproduce the previous behavior of empty result images).
+
+The `--viz_topk` flag is also available on `hf_benchmark.py` but is rarely triggered there because baseline detections normally clear the threshold. It is intentionally **not** exposed on `secure_inference_benchmark.py` — that script restores full baseline accuracy, so any image with zero drawn boxes is a faithful indication that the model genuinely found nothing above the threshold.
 
 #### 4.3 Authorized Device (per-batch decrypt-infer-re-encrypt)
 
