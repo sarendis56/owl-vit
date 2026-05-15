@@ -399,6 +399,7 @@ python3 demo_sidebyside.py \
 - The middle column shows the encrypted-but-unauthorized model. It advances at roughly the baseline rate (no decrypt overhead for an attacker) and produces the obviously-wrong dashed-orange top-K boxes from `--viz_topk`.
 - Each column loops independently once it reaches the end of its sequence, so the demo can run unattended.
 - The script auto-selects an interactive matplotlib backend (TkAgg / QtAgg / ...). If no display is available (e.g. a plain SSH session with no X forwarding), it exits with a hint to either reconnect with `ssh -X` or re-run with `--save demo.mp4` (also accepts `.gif`) to render the playback headlessly via ffmpeg / pillow. Use `--save_seconds N` to control the recording length.
+- For `--save *.mp4` you need the `ffmpeg` command-line tool. The cleanest option in a `uv` / `venv` workflow is `uv pip install imageio-ffmpeg`, which drops a static ffmpeg binary inside the venv; the demo script auto-wires it into matplotlib (prints the path it picks up at startup). Alternatives: `sudo apt install ffmpeg` (system-wide) or `conda install -c conda-forge -n base ffmpeg`. The PyPI `ffmpeg` package is a different, unrelated wrapper and will not help. If you'd rather not install anything, use `--save demo.gif` (Pillow writer, no extra dependency).
 
 ### 7. Notes
 

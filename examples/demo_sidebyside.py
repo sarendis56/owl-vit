@@ -67,6 +67,28 @@ def _select_interactive_backend():
 
 _INTERACTIVE_BACKEND = _select_interactive_backend()
 
+
+def _wire_imageio_ffmpeg():
+    """Point matplotlib at the ffmpeg binary bundled in the imageio-ffmpeg wheel.
+
+    Lets users install ffmpeg with ``uv pip install imageio-ffmpeg`` instead of
+    needing a system / conda binary on PATH. No-op if the package is not
+    installed.
+    """
+    try:
+        import imageio_ffmpeg
+    except ImportError:
+        return None
+    try:
+        exe = imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return None
+    matplotlib.rcParams["animation.ffmpeg_path"] = exe
+    return exe
+
+
+_IMAGEIO_FFMPEG = _wire_imageio_ffmpeg()
+
 import matplotlib.image as mpimg  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.animation import FuncAnimation  # noqa: E402
@@ -212,15 +234,32 @@ def main():
     plt.tight_layout(rect=(0, 0, 1, 0.96))
 
     if args.save:
+        ext = os.path.splitext(args.save)[1].lower()
+        if ext == ".gif":
+            writer = "pillow"
+        else:
+            from matplotlib.animation import FFMpegWriter
+            if not FFMpegWriter.isAvailable():
+                print(
+                    f"Cannot write {args.save}: matplotlib's FFMpegWriter is unavailable.\n"
+                    "Matplotlib needs the ffmpeg command-line tool (the PyPI `ffmpeg`\n"
+                    "package is a different, unrelated wrapper). Install one of:\n"
+                    "    uv pip install imageio-ffmpeg     # bundles a static ffmpeg in the venv\n"
+                    "    sudo apt install ffmpeg           # system-wide\n"
+                    "    conda install -c conda-forge -n base ffmpeg\n"
+                    "Or rerun with `--save demo.gif` to use the pure-Python Pillow writer.",
+                    file=sys.stderr,
+                )
+                sys.exit(3)
+            writer = "ffmpeg"
+            if _IMAGEIO_FFMPEG:
+                print(f"Using ffmpeg from imageio-ffmpeg: {_IMAGEIO_FFMPEG}")
         tick_ms = 50
         n_save_frames = max(1, int(args.save_seconds * 1000 / tick_ms))
         anim = FuncAnimation(fig, tick, frames=n_save_frames, interval=tick_ms,
                              blit=False, cache_frame_data=False, repeat=False)
-        print(f"Rendering {args.save_seconds:.1f}s ({n_save_frames} frames) to {args.save}...")
-        if args.save.lower().endswith(".gif"):
-            anim.save(args.save, writer="pillow", fps=1000 / tick_ms)
-        else:
-            anim.save(args.save, fps=1000 / tick_ms)
+        print(f"Rendering {args.save_seconds:.1f}s ({n_save_frames} frames) to {args.save} using {writer}...")
+        anim.save(args.save, writer=writer, fps=1000 / tick_ms)
         print(f"Saved {args.save}")
     else:
         anim = FuncAnimation(fig, tick, interval=50, blit=False, cache_frame_data=False)
