@@ -1062,7 +1062,7 @@ def create_sample_dataset(output_dir: str, num_images: int = 10):
     return annotation_path
 
 
-def extract_pascal_voc_dataset(zip_path: str = "/data/pascal.zip", output_dir: str = "./datasets/pascal_voc_2012", max_images: Optional[int] = None):
+def extract_pascal_voc_dataset(zip_path: str = "data/pascal.zip", output_dir: str = "./datasets/pascal_voc_2012", max_images: Optional[int] = None):
     """Extract and process Pascal VOC 2012 dataset from zip file"""
     try:
         import zipfile
@@ -1313,7 +1313,7 @@ if __name__ == "__main__":
     parser.add_argument("--download_pascal_voc", action="store_true",
                        help="Download Pascal VOC 2012 dataset")
     parser.add_argument("--extract_pascal_voc", action="store_true",
-                       help="Extract Pascal VOC 2012 dataset from /data/pascal.zip")
+                       help="Extract Pascal VOC 2012 dataset from data/pascal.zip (relative to the current working directory)")
     parser.add_argument("--use_pascal_voc_prompts", action="store_true",
                        help="Use Pascal VOC class names as prompts")
     parser.add_argument("--viz_threshold", type=float, default=0.5,
@@ -1342,8 +1342,8 @@ if __name__ == "__main__":
     
     # Handle dataset preparation
     if args.extract_pascal_voc:
-        print("Extracting Pascal VOC 2012 dataset from /data/pascal.zip...")
-        dataset_path = extract_pascal_voc_dataset("/data/pascal.zip", args.dataset, args.max_images)
+        print("Extracting Pascal VOC 2012 dataset from data/pascal.zip...")
+        dataset_path = extract_pascal_voc_dataset("data/pascal.zip", args.dataset, args.max_images)
         if dataset_path is None:
             print("Failed to extract Pascal VOC dataset. Exiting.")
             sys.exit(1)

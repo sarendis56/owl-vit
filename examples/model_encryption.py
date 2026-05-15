@@ -242,7 +242,7 @@ def main():
     parser.add_argument("--use_channels_last", action="store_true", help="Use channels_last for GPU")
     parser.add_argument("--create_sample_dataset", action="store_true", help="Create a small sample dataset for testing")
     parser.add_argument("--download_pascal_voc", action="store_true", help="Download Pascal VOC 2012 dataset")
-    parser.add_argument("--extract_pascal_voc", action="store_true", help="Extract Pascal VOC 2012 dataset from /data/pascal.zip")
+    parser.add_argument("--extract_pascal_voc", action="store_true", help="Extract Pascal VOC 2012 dataset from data/pascal.zip (relative to the current working directory)")
     parser.add_argument("--use_pascal_voc_prompts", action="store_true", default=True, help="Use Pascal VOC class names as prompts (default: True)")
     parser.add_argument("--coco_eval", action="store_true", default=True, help="Compute COCO-style metrics with pycocotools (default: True)")
     parser.add_argument("--eval_threshold", type=float, default=0.2, help="Score threshold for reporting precision/recall/F1 (does not affect AP)")
@@ -273,8 +273,8 @@ def main():
 
     # Prepare dataset path similar to hf_benchmark
     if args.extract_pascal_voc:
-        print("Extracting Pascal VOC 2012 dataset from /data/pascal.zip...")
-        dataset_path = extract_pascal_voc_dataset("/data/pascal.zip", args.dataset, args.max_images)
+        print("Extracting Pascal VOC 2012 dataset from data/pascal.zip...")
+        dataset_path = extract_pascal_voc_dataset("data/pascal.zip", args.dataset, args.max_images)
         if dataset_path is None:
             print("Failed to extract Pascal VOC dataset. Exiting.")
             sys.exit(1)

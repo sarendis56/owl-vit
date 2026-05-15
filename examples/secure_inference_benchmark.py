@@ -214,7 +214,7 @@ def main():
     parser.add_argument("--viz_threshold", type=float, default=0.5, help="Visualization threshold")
     parser.add_argument("--save_visualizations", action="store_true", help="Save visualization images")
     parser.add_argument("--use_channels_last", action="store_true", help="Use channels_last for GPU")
-    parser.add_argument("--extract_pascal_voc", action="store_true", help="Extract Pascal VOC 2012 dataset from /data/pascal.zip")
+    parser.add_argument("--extract_pascal_voc", action="store_true", help="Extract Pascal VOC 2012 dataset from data/pascal.zip (relative to the current working directory)")
     parser.add_argument("--download_pascal_voc", action="store_true", help="Download Pascal VOC 2012 dataset")
     parser.add_argument("--create_sample_dataset", action="store_true", help="Create sample dataset")
     parser.add_argument("--use_pascal_voc_prompts", action="store_true", default=True, help="Use Pascal VOC prompts")
@@ -238,8 +238,8 @@ def main():
 
     # Dataset prep
     if args.extract_pascal_voc:
-        print("Extracting Pascal VOC 2012 dataset from /data/pascal.zip...")
-        dataset_path = extract_pascal_voc_dataset("/data/pascal.zip", args.dataset, args.max_images)
+        print("Extracting Pascal VOC 2012 dataset from data/pascal.zip...")
+        dataset_path = extract_pascal_voc_dataset("data/pascal.zip", args.dataset, args.max_images)
         if dataset_path is None:
             print("Failed to extract Pascal VOC dataset. Exiting.")
             sys.exit(1)

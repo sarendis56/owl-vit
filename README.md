@@ -219,7 +219,7 @@ This section describes how to set up the environment from scratch on commodity G
 
 - An NVIDIA GPU with CUDA support (tested on Jetson Orin Nano with JetPack 6 / CUDA 12.6, and on x86 hosts with CUDA 12.x).
 - Docker with NVIDIA Container Toolkit (recommended for Jetson Orin), or a host Python 3.10+ environment (commodity GPU).
-- The Pascal VOC 2012 archive available at `/data/pascal.zip` inside the runtime environment. The benchmark scripts extract and convert annotations automatically when given `--extract_pascal_voc`.
+- The Pascal VOC 2012 archive available at `data/pascal.zip`, resolved relative to the directory you run the benchmark scripts from (per Section 4, that is `examples/`, so place the archive at `examples/data/pascal.zip`). If your dataset lives elsewhere, create a symlink — for example `ln -s /path/to/pascal.zip examples/data/pascal.zip` — rather than moving the file. The benchmark scripts extract and convert annotations automatically when given `--extract_pascal_voc`.
 
 ### 2. Environment Setup
 
@@ -282,7 +282,14 @@ Both commands should succeed and the first should report `True` along with your 
 
 ### 3. Dataset Preparation
 
-The first invocation of any script with `--extract_pascal_voc` extracts `/data/pascal.zip` into `./pascal_voc_extracted/` and builds a `pascal_voc_annotations.json` file. Subsequent runs detect the existing annotations and skip re-extraction, so the flag can be left on for convenience.
+The first invocation of any script with `--extract_pascal_voc` extracts `data/pascal.zip` (relative to the current working directory) into `./pascal_voc_extracted/` and builds a `pascal_voc_annotations.json` file. Subsequent runs detect the existing annotations and skip re-extraction, so the flag can be left on for convenience.
+
+If the archive is stored elsewhere (e.g. a shared dataset volume), create a `data/` directory next to where you invoke the scripts and symlink the archive in:
+
+```bash
+mkdir -p examples/data
+ln -s /absolute/path/to/pascal.zip examples/data/pascal.zip
+```
 
 ### 4. Running the Benchmarks
 
